@@ -1,0 +1,40 @@
+<!doctype html><html lang="bn"><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><title>মেস হিসাব - মাসিক ব্যবস্থাপনা</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+Bengali:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap">
+
+
+<link rel="stylesheet" href="styles.css">
+</head><body>
+
+<div class="wrap" id="appShell">
+  <header class="top">
+    <div class="brand">
+      <h1>মেস হিসাব</h1>
+      <input id="messName" class="name-in" aria-label="মেসের নাম" placeholder="মেসের নাম লিখুন" maxlength="40">
+    </div>
+    <div class="month">
+      <button class="iconbtn" data-act="prev" aria-label="আগের মাস">&#8249;</button>
+      <span id="monthLabel">...</span>
+      <button class="iconbtn" data-act="next" aria-label="পরের মাস">&#8250;</button>
+    </div>
+    <button class="btn" data-act="theme" aria-label="থিম বদলান" title="লাইট/ডার্ক মোড">◐ <span class="theme-label">থিম</span></button>
+  </header>
+
+  <nav class="tabs" id="tabs" role="tablist" aria-label="বিভাগ">
+    <button class="tab" role="tab" data-act="tab" data-tab="hishab">হিসাব</button>
+    <button class="tab" role="tab" data-act="tab" data-tab="meal">মিল</button>
+    <button class="tab" role="tab" data-act="tab" data-tab="bazar">বাজার</button>
+    <button class="tab" role="tab" data-act="tab" data-tab="kharoch">নির্ধারিত খরচ</button>
+    <button class="tab" role="tab" data-act="tab" data-tab="member">সদস্য</button>
+  </nav>
+
+  <main id="view"><p class="hint">লোড হচ্ছে...</p></main>
+  <div class="status" id="status" aria-live="polite"></div>
+</div>
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+<script src="app.js"></script>
+</body></html>
