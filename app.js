@@ -264,7 +264,7 @@
       mealMembers.forEach(function (m) {
         ['lunch', 'dinner'].forEach(function (slot, index) {
           var v = mealSlot(d, m.id, slot), labels = ['দুপুর', 'রাত'];
-          h += '<td class="n"><input class="inp num meal-input" type="number" inputmode="numeric" min="1" step="1" data-f="meal" data-slot="' + slot + '" data-d="' + d + '" data-m="' + m.id + '" value="' + v + '" aria-label="' + esc(m.name) + ', ' + d.toLocaleString('bn-BD') + ' তারিখ, ' + labels[index] + '"></td>';
+          h += '<td class="n"><input class="inp num meal-input" type="number" inputmode="numeric" min="1" step="1" placeholder="–" data-f="meal" data-slot="' + slot + '" data-d="' + d + '" data-m="' + m.id + '" value="' + v + '" aria-label="' + esc(m.name) + ', ' + d.toLocaleString('bn-BD') + ' তারিখ, ' + labels[index] + '"></td>';
         });
       });
       h += '<td class="n" data-live="dmeal" data-d="' + d + '"></td></tr>';
