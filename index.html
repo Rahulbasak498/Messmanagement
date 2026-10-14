@@ -8,21 +8,94 @@
 <link rel="stylesheet" href="styles.css">
 </head><body>
 
-<div class="wrap" id="appShell">
+<section class="auth-layout" id="authLayout" hidden>
+  <aside class="auth-showcase">
+    <div class="auth-brand"><span class="auth-brand-icon">ম</span><span>মেস হিসাব</span></div>
+    <div class="auth-pitch"><span class="auth-kicker">সহজ হিসাব, নিশ্চিন্ত মেস</span><h2>মিল, বাজার<br>আর মাসের হিসাব<br>এক জায়গায়।</h2><p>আপনার মেসের দৈনন্দিন হিসাব রাখুন সহজে, গুছিয়ে।</p></div>
+    <div class="auth-showcase-foot"><span class="auth-dot"></span> নিরাপদে সংরক্ষিত আপনার হিসাব</div>
+  </aside>
+  <div class="auth-card" id="authPanel">
+    <div class="auth-heading"><span class="auth-kicker" id="authEyebrow">আপনার অ্যাকাউন্ট</span><h1 id="authTitle">লগইন করুন</h1><p id="authDescription">চালিয়ে যেতে আপনার ইমেইল ও পাসওয়ার্ড দিন।</p></div>
+    <div class="auth-fields" id="registerFields" hidden>
+      <label for="authName">আপনার নাম</label>
+      <input class="inp" id="authName" type="text" autocomplete="name" maxlength="80" placeholder="নাম লিখুন">
+      <label for="authMobile">মোবাইল নম্বর</label>
+      <input class="inp" id="authMobile" type="tel" autocomplete="tel" maxlength="20" placeholder="01XXXXXXXXX">
+    </div>
+    <label for="authEmail">ইমেইল ঠিকানা</label>
+    <input class="inp" id="authEmail" type="email" autocomplete="email" placeholder="name@example.com" required>
+    <label for="authPassword">পাসওয়ার্ড</label>
+    <input class="inp" id="authPassword" type="password" autocomplete="current-password" minlength="6" placeholder="কমপক্ষে ৬ অক্ষর" required>
+    <button class="btn primary auth-submit" type="button" data-act="auth-signin" id="authLoginButton">লগইন করুন</button>
+    <button class="btn primary auth-submit" type="button" data-act="auth-register" id="authRegisterButton" hidden>অ্যাকাউন্ট তৈরি করুন</button>
+    <p class="auth-message" id="authMessage" role="status" aria-live="polite"></p>
+    <p class="auth-switch" id="loginSwitch">নতুন এখানে? <button type="button" data-act="auth-show-register">নতুন account তৈরি করুন</button></p>
+    <p class="auth-switch" id="registerSwitch" hidden>আগে account আছে? <button type="button" data-act="auth-show-login">লগইন করুন</button></p>
+  </div>
+</section>
+
+<section class="auth-card profile-card" id="profilePanel" hidden>
+  <div class="profile-card-header">
+    <div class="profile-avatar-large" id="profileAvatarLarge">ম</div>
+    <div class="profile-header-meta">
+      <h1 id="profileTitle">আমার প্রোফাইল</h1>
+      <span class="profile-role-badge" id="profileRoleBadge">ব্যবহারকারী</span>
+    </div>
+  </div>
+  <p id="profileHelp">আপনার তথ্য দেখুন বা সম্পাদনা করুন।</p>
+  <div class="profile-fields-list">
+    <div class="field">
+      <label for="profileName">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M6 21v-2a6 6 0 0 1 12 0v2"/></svg>
+        আপনার নাম
+      </label>
+      <input class="inp" id="profileName" type="text" autocomplete="name" maxlength="80" placeholder="আপনার পূর্ণ নাম লিখুন" required>
+    </div>
+    <div class="field">
+      <label for="profileEmail">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 7L2 7"/></svg>
+        ইমেইল ঠিকানা (পরিবর্তনযোগ্য নয়)
+      </label>
+      <input class="inp" id="profileEmail" type="email" readonly>
+    </div>
+    <div class="field">
+      <label for="profileMobile">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+        মোবাইল নম্বর
+      </label>
+      <input class="inp" id="profileMobile" type="tel" autocomplete="tel" maxlength="20" placeholder="01XXXXXXXXX" required>
+    </div>
+  </div>
+  <div class="row profile-actions-row">
+    <button class="btn primary profile-save-btn" type="button" data-act="profile-save">
+      <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+      সেভ করুন
+    </button>
+    <button class="btn profile-cancel-btn" id="profileCancel" type="button" data-act="profile-cancel">ফিরে যান</button>
+  </div>
+  <p class="auth-message" id="profileMessage" role="status" aria-live="polite"></p>
+</section>
+
+<div class="wrap" id="appShell" hidden>
   <header class="top">
     <div class="brand">
       <h1>মেস হিসাব</h1>
       <input id="messName" class="name-in" aria-label="মেসের নাম" placeholder="মেসের নাম লিখুন" maxlength="40">
     </div>
-    <div class="month">
+    <div class="month" aria-label="মাস নির্বাচন">
       <button class="iconbtn" data-act="prev" aria-label="আগের মাস">&#8249;</button>
       <span id="monthLabel">...</span>
       <button class="iconbtn" data-act="next" aria-label="পরের মাস">&#8250;</button>
     </div>
-    <button class="btn" data-act="theme" aria-label="থিম বদলান" title="লাইট/ডার্ক মোড">◐ <span class="theme-label">থিম</span></button>
+    <div class="top-actions">
+      <button class="btn theme-action" data-act="theme" aria-label="থিম বদলান" title="লাইট/ডার্ক মোড">◐ <span class="theme-label">থিম</span></button>
+      <button class="btn profile-action" data-act="profile-open"><span class="avatar" id="userAvatar">ম</span><span id="headerUserName">আমার প্রোফাইল</span></button>
+      <button class="btn signout-action" data-act="auth-signout">লগআউট</button>
+    </div>
   </header>
 
-  <nav class="tabs" id="tabs" role="tablist" aria-label="বিভাগ">
+  <div class="workspace">
+  <nav class="tabs" id="tabs" role="tablist" aria-label="প্রধান বিভাগ">
     <button class="tab" role="tab" data-act="tab" data-tab="hishab"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V11M12 20V4M19 20v-6"/></svg><span>হিসাব</span></button>
     <button class="tab" role="tab" data-act="tab" data-tab="meal"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h18a9 9 0 0 1-18 0z"/><path d="M8.5 8c0-1.6 1.2-1.6 1.2-3.2M14 8c0-1.6 1.2-1.6 1.2-3.2"/></svg><span>মিল</span></button>
     <button class="tab" role="tab" data-act="tab" data-tab="bazar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 8h14l-1 12H6z"/><path d="M9 8a3 3 0 0 1 6 0"/></svg><span>বাজার</span></button>
@@ -31,6 +104,7 @@
   </nav>
 
   <main id="view"><p class="hint">লোড হচ্ছে...</p></main>
+  </div>
   <div class="status" id="status" aria-live="polite"></div>
 </div>
 <div class="toast" id="toast" role="status" hidden></div>
@@ -38,5 +112,9 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/12.19.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/12.19.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore-compat.js"></script>
+<script src="firebase-config.js"></script>
 <script src="app.js"></script>
 </body></html>

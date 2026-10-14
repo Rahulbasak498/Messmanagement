@@ -4,7 +4,7 @@
   var $ = function (id) { return document.getElementById(id); };
   var now = new Date();
   var startYm = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
-  var ym = startYm, S = null, tab = 'hishab', dashboardDay = null, dbNS = null, dlNS = null, saveTimer = null, toastTimer = null;
+  var ym = startYm, S = null, tab = 'hishab', dashboardDay = null, dbNS = null, authNS = null, currentUser = null, currentProfile = null, profileSetup = false, loadedUid = '', creatingAccount = false, dlNS = null, saveTimer = null, toastTimer = null;
   var MARKET_ORDER_KEY = 'mess-market-order-v2';
   var PREFERRED_MARKET_ORDER = ['Tasik Adnan', 'Shoumik Saha', 'Gopal Roy', 'Ashim Bhoumik', 'Rahul Basak Santo'];
   var SUMMARY_MEMBER_ORDER = ['rahul basak santo', 'tasik adnan', 'gopal roy', 'shoumik saha', 'ashim bhoumik'];
@@ -26,6 +26,73 @@
     clearTimeout(toastTimer); toastTimer = setTimeout(function () { t.hidden = true; }, 3200);
   }
   function setStatus(s) { $('status').textContent = s; }
+  function setAuthMode(mode) {
+    var createMode = mode === 'register';
+    $('registerFields').hidden = !createMode;
+    $('authTitle').textContent = createMode ? 'নতুন account তৈরি করুন' : 'লগইন করুন';
+    $('authEyebrow').textContent = createMode ? 'শুরু করুন' : 'আবার স্বাগতম';
+    $('authDescription').textContent = createMode ? 'আপনার তথ্য দিয়ে account তৈরি করুন। এরপর email ও password দিয়ে লগইন করুন।' : 'চালিয়ে যেতে আপনার ইমেইল ও পাসওয়ার্ড দিন।';
+    $('authLoginButton').hidden = createMode;
+    $('authRegisterButton').hidden = !createMode;
+    $('loginSwitch').hidden = createMode;
+    $('registerSwitch').hidden = !createMode;
+    $('authPassword').autocomplete = createMode ? 'new-password' : 'current-password';
+    $('authMessage').textContent = '';
+    $('authMessage').classList.remove('is-success');
+  }
+  function showProfileForm(user, data, setup) {
+    currentUser = user; profileSetup = setup;
+    $('authLayout').hidden = true; $('appShell').hidden = true; $('profilePanel').hidden = false;
+    $('profileHelp').textContent = setup ? 'আপনার প্রোফাইল সম্পূর্ণ করতে নাম ও মোবাইল নম্বর দিন।' : 'নাম ও মোবাইল নম্বর সম্পাদনা করা যাবে। ইমেইল বদলানো যাবে না।';
+    var displayName = (data && data.name) || '';
+    $('profileName').value = displayName;
+    $('profileEmail').value = user.email || data && data.email || '';
+    $('profileMobile').value = data && data.mobile || '';
+    $('profileCancel').hidden = setup;
+    $('profileMessage').textContent = '';
+    var initial = (displayName || 'ম').trim().charAt(0).toLocaleUpperCase('bn-BD');
+    if ($('profileAvatarLarge')) $('profileAvatarLarge').textContent = initial;
+    if ($('profileRoleBadge')) {
+      var isAdm = Boolean(user && user.email && user.email.toLowerCase() === 'rahulbasak498@gmail.com');
+      $('profileRoleBadge').textContent = isAdm ? 'অ্যাডমিন' : 'মেম্বার';
+      $('profileRoleBadge').className = 'profile-role-badge ' + (isAdm ? 'is-admin' : 'is-user');
+    }
+  }
+  async function enterApp(user, data) {
+    currentUser = user; currentProfile = data;
+    $('authLayout').hidden = true; $('profilePanel').hidden = true; $('appShell').hidden = false;
+    if (loadedUid === user.uid) return;
+    loadedUid = user.uid;
+    try { await loadMonth(ym); renderAll(); setStatus('Firebase-এ তথ্য সেভ হচ্ছে'); }
+    catch (err) { loadedUid = ''; $('profileMessage').textContent = 'হিসাব লোড হয়নি। Firestore Rules যাচাই করুন।'; console.error('Firebase data load failed:', err); }
+  }
+  async function handleAuthState(user) {
+    if (creatingAccount) return;
+    currentUser = user;
+    window.isAdmin = Boolean(user && user.email && user.email.toLowerCase() === 'rahulbasak498@gmail.com');
+    if (!user) {
+      window.isAdmin = false;
+      $('authLayout').hidden = false; $('profilePanel').hidden = true; $('appShell').hidden = true;
+      return;
+    }
+    try {
+      var snap = await dbNS.collection('users').doc(user.uid).get();
+      if (!snap.exists || !snap.data().name || !snap.data().mobile) {
+        showProfileForm(user, snap.exists ? snap.data() : null, true);
+        return;
+      }
+      var profileData = snap.data();
+      if (Object.prototype.hasOwnProperty.call(profileData, 'nid')) {
+        await dbNS.collection('users').doc(user.uid).update({ nid: window.firebase.firestore.FieldValue.delete() });
+        delete profileData.nid;
+      }
+      await enterApp(user, profileData);
+    } catch (err) {
+      $('authLayout').hidden = false; $('appShell').hidden = true;
+      $('authMessage').textContent = 'প্রোফাইল লোড হয়নি। Firestore Rules-এ users collection-এর নিয়ম যোগ করুন।';
+      console.error('Firebase profile read failed:', err);
+    }
+  }
   function memberName(id) { var m = S.members.filter(function (x) { return x.id === id; })[0]; return m ? m.name : '?'; }
   function summaryMemberRank(name) {
     var rank = SUMMARY_MEMBER_ORDER.indexOf(String(name).toLowerCase());
@@ -43,6 +110,15 @@
   function bazarAssignee(day) {
     if (!S.members.length) return null;
     return S.members[Math.min(Math.floor((day - 1) / 6), S.members.length - 1)];
+  }
+  function canEditMealOnDay(day) {
+    if (window.isAdmin) return true;
+    var assigned = bazarAssignee(day);
+    if (!assigned) return false;
+    var uName = (currentProfile && currentProfile.name ? currentProfile.name : '').trim().toLowerCase();
+    var aName = (assigned.name || '').trim().toLowerCase();
+    if (uName && aName && (uName === aName || uName.indexOf(aName) >= 0 || aName.indexOf(uName) >= 0)) return true;
+    return false;
   }
   function applyMarketOrder(st) {
     var order = null;
@@ -87,10 +163,19 @@
     if (name === 'ইন্টারনেট বিল') return 'Wi-Fi বিল';
     return name;
   }
-  function blankState() { return { name: 'আমাদের মেস', members: [], meals: {}, bazar: [], fixed: defaultFixed(), sample: false }; }
+  function blankState() { return { name: 'আমাদের মেস', members: [], meals: {}, bazar: [], fixed: defaultFixed(), fixedPublished: false, sample: false }; }
   async function readMonth(k) {
     if (dbNS) {
-      try { var sn = await dbNS.doc('months/' + k).get(); if (sn.exists) { return JSON.parse(sn.data().json); } } catch (e) {}
+      try {
+        var sn = await dbNS.doc('months/' + k).get();
+        if (sn.exists) { return JSON.parse(sn.data().json); }
+        var localRaw = localStorage.getItem('mess:' + k);
+        if (localRaw) {
+          var localState = JSON.parse(localRaw);
+          await dbNS.doc('months/' + k).set({ json: localRaw, updated: Date.now() });
+          return localState;
+        }
+      } catch (e) { console.error('Firebase read failed:', e); }
     }
     try { var raw = localStorage.getItem('mess:' + k); if (raw) { return JSON.parse(raw); } } catch (e) {}
     return null;
@@ -151,7 +236,7 @@
     try { localStorage.setItem('mess:' + k, json); localSaved = true; } catch (e) {}
     if (dbNS) {
       try { await dbNS.doc('months/' + k).set({ json: json, updated: Date.now() }); setStatus('তথ্য সেভ হয়েছে'); }
-      catch (e) { setStatus(localSaved ? 'এই ব্রাউজারে সেভ হয়েছে' : 'সেভ হয়নি — স্টোরেজ খালি করুন'); }
+      catch (e) { setStatus(localSaved ? 'Firebase-এ সেভ হয়নি; এই ব্রাউজারে সেভ হয়েছে' : 'সেভ হয়নি — স্টোরেজ খালি করুন'); }
     } else { setStatus(localSaved ? 'এই ব্রাউজারে সেভ হয়েছে' : 'সেভ হয়নি — স্টোরেজ খালি করুন'); }
   }
 
@@ -202,7 +287,8 @@
     S.bazar.forEach(function (b) {
       if (b.day === selectedDay) { dailyMarketTotal += b.amount; if (b.mid in dailyMarket) dailyMarket[b.mid] += b.amount; }
     });
-    var h = '<section class="tiles">' +
+    var h = S.members.length ? '' : '<section class="welcome-panel"><div class="welcome-icon" aria-hidden="true">✦</div><div><span class="eyebrow">শুরু করুন</span><h2>আপনার মেসের হিসাব তৈরি করুন</h2><p>প্রথমে সদস্যদের নাম ও বাসা ভাড়া যোগ করুন। তারপর মিল ও বাজারের হিসাব রাখুন।</p></div><button class="btn primary" data-act="tab" data-tab="member">সদস্য যোগ করুন <span aria-hidden="true">→</span></button></section>';
+    h += '<section class="tiles">' +
       tile('মোট বাজার', f2(c.totalBazar), '৳, ' + S.bazar.length.toLocaleString('bn-BD') + 'টি কেনাকাটা') +
       tile('মোট মিল', fm(c.totalMeal), c.n.toLocaleString('bn-BD') + ' জন সদস্য') +
       tile('মিলের দর', f2(c.rate), 'প্রতি মিল, ৳', true) +
@@ -220,10 +306,17 @@
       h += '</tbody><tfoot><tr><td>মোট</td><td class="n">' + fm(lunchTotal) + '</td><td class="n">' + fm(dinnerTotal) + '</td><td class="n">' + fm(lunchTotal + dinnerTotal) + '</td><td class="n">' + f2(dailyMarketTotal) + '</td></tr></tfoot></table></div>';
     }
     h += '</section>';
-    var summaryVisible = S.showMemberSummary === true;
-    h += '<section class="panel"><div class="summary-panel-head"><h2>সদস্যভিত্তিক হিসাব</h2><button class="btn small" data-act="toggleMemberSummary">' + (summaryVisible ? 'হিসাব লুকান' : 'হিসাব দেখুন') + '</button></div>';
-    if (!summaryVisible) {
-      h += '<p class="hint">মাসের বাকি তথ্য যোগ করা হলে এখানে সদস্যভিত্তিক হিসাব দেখুন।</p>';
+    var isPublished = S.fixedPublished === true;
+    h += '<section class="panel"><div class="summary-panel-head"><h2>সদস্যভিত্তিক হিসাব (মাসিক রিপোর্ট)</h2>' +
+      (isPublished ? '<span class="pill good">অনুমোদিত ও প্রকাশিত</span>' : '<span class="pill zero">মাসের শেষে প্রকাশিত হবে</span>') +
+      '</div>';
+    if (!isPublished) {
+      h += '<div class="summary-pending-card" style="padding:22px;background:var(--tint);border:1px dashed var(--line);border-radius:16px;text-align:center;margin-top:6px">' +
+        '<div style="font-size:32px;margin-bottom:8px">📊</div>' +
+        '<h3 style="font-size:17px;margin:0 0 6px;color:var(--ink)">সদস্যভিত্তিক হিসাব এখনো প্রকাশিত হয়নি</h3>' +
+        '<p class="hint" style="max-width:54ch;margin:0 auto">মাসের শেষে যখন অ্যাডমিন “নির্ধারিত খরচ” সেভ করে রিপোর্ট প্রকাশ করবেন, তখন এখানে প্রতি সদস্যের বাসা ভাড়া, মিলের খরচ, নির্ধারিত খরচ ও পাওনা/দেনার বিস্তারিত হিসাব দেখতে পাবেন।</p>' +
+        (window.isAdmin ? '<div style="margin-top:14px"><button class="btn primary small" data-act="tab" data-tab="kharoch">নির্ধারিত খরচে যান ও প্রকাশ করুন →</button></div>' : '') +
+        '</div>';
     } else {
       if (c.totalMeal === 0 && c.totalBazar > 0) h += '<p class="warn">মিলের তথ্য নেই, তাই মিলের দর ০ দেখাচ্ছে। মিল বিভাগে মিলের সংখ্যা লিখুন।</p>';
       if (!c.n) {
@@ -260,11 +353,18 @@
     mealMembers.forEach(function () { h += '<th><span class="meal-slot">দুপুর</span></th><th><span class="meal-slot">রাত</span></th>'; });
     h += '</tr></thead><tbody>';
     for (var d = 1; d <= days; d++) {
-      h += '<tr><td class="day">' + dayLabel(d) + '</td>';
+      var editable = canEditMealOnDay(d);
+      var assignee = bazarAssignee(d);
+      h += '<tr class="' + (editable ? 'turn-active-row' : 'turn-readonly-row') + '"><td class="day">' + dayLabel(d) +
+        (assignee ? ' <span style="font-size:11px;opacity:0.75;display:block">বাজার: ' + esc(assignee.name) + '</span>' : '') + '</td>';
       mealMembers.forEach(function (m) {
         ['lunch', 'dinner'].forEach(function (slot, index) {
           var v = mealSlot(d, m.id, slot), labels = ['দুপুর', 'রাত'];
-          h += '<td class="n"><input class="inp num meal-input" type="number" inputmode="numeric" min="1" step="1" placeholder="–" data-f="meal" data-slot="' + slot + '" data-d="' + d + '" data-m="' + m.id + '" value="' + v + '" aria-label="' + esc(m.name) + ', ' + d.toLocaleString('bn-BD') + ' তারিখ, ' + labels[index] + '"></td>';
+          if (editable) {
+            h += '<td class="n"><input class="inp num meal-input" type="number" inputmode="numeric" min="1" step="1" placeholder="–" data-f="meal" data-slot="' + slot + '" data-d="' + d + '" data-m="' + m.id + '" value="' + v + '" aria-label="' + esc(m.name) + ', ' + d.toLocaleString('bn-BD') + ' তারিখ, ' + labels[index] + '"></td>';
+          } else {
+            h += '<td class="n" style="color:var(--muted)">' + (v !== '' ? v : '<span style="opacity:0.4">–</span>') + '</td>';
+          }
         });
       });
       h += '<td class="n" data-live="dmeal" data-d="' + d + '"></td></tr>';
@@ -318,27 +418,42 @@
     h += '<div class="tablewrap"><table><thead><tr><th>খরচের নাম</th><th>ভাগের নিয়ম</th><th class="n">টাকা</th><th></th></tr></thead><tbody>';
     S.fixed.forEach(function (x) {
       var cust = x.split === 'custom';
-      h += '<tr><td>' + (x.locked ? '<span class="name">' + esc(x.name) + '</span>' : '<input class="inp" type="text" maxlength="40" data-f="fname" data-id="' + x.id + '" value="' + esc(x.name) + '" aria-label="খরচের নাম">') + '</td>' +
-        '<td><select class="inp" data-f="fsplit" data-id="' + x.id + '" aria-label="ভাগের নিয়ম"><option value="equal"' + (cust ? '' : ' selected') + '>সমান ভাগ</option><option value="custom"' + (cust ? ' selected' : '') + '>আলাদা পরিমাণ</option></select></td>';
+      h += '<tr><td>' + (x.locked || !window.isAdmin ? '<span class="name">' + esc(x.name) + '</span>' : '<input class="inp" type="text" maxlength="40" data-f="fname" data-id="' + x.id + '" value="' + esc(x.name) + '" aria-label="খরচের নাম">') + '</td>' +
+        '<td><select class="inp" data-f="fsplit" data-id="' + x.id + '" aria-label="ভাগের নিয়ম"' + (window.isAdmin ? '' : ' disabled') + '><option value="equal"' + (cust ? '' : ' selected') + '>সমান ভাগ</option><option value="custom"' + (cust ? ' selected' : '') + '>আলাদা পরিমাণ</option></select></td>';
       if (cust) h += '<td class="n" data-live="fitem" data-id="' + x.id + '"></td>';
-      else h += '<td class="n"><input class="inp num" type="number" inputmode="decimal" min="0" step="any" data-f="famt" data-id="' + x.id + '" value="' + (x.amount || '') + '" placeholder="০" style="width:120px" aria-label="টাকা"></td>';
-      h += '<td>' + (x.locked ? '' : '<button class="btn small danger" data-act="delFixed" data-id="' + x.id + '">মুছুন</button>') + '</td></tr>';
+      else h += '<td class="n">' + (window.isAdmin ? '<input class="inp num" type="number" inputmode="decimal" min="0" step="any" data-f="famt" data-id="' + x.id + '" value="' + (x.amount || '') + '" placeholder="০" style="width:120px" aria-label="টাকা">' : '<span>' + (x.amount || '') + '</span>') + '</td>';
+      h += '<td>' + (x.locked || !window.isAdmin ? '' : '<button class="btn small danger" data-act="delFixed" data-id="' + x.id + '">মুছুন</button>') + '</td></tr>';
       if (cust && S.members.length) {
         h += '<tr><td colspan="4" style="background:var(--bg)"><div class="row">';
         S.members.forEach(function (m) {
           var v = (x.custom && x.custom[m.id]) || '';
-          h += '<div class="field"><label for="fc-' + x.id + m.id + '">' + esc(m.name) + '</label><input id="fc-' + x.id + m.id + '" class="inp num" type="number" inputmode="decimal" min="0" step="any" data-f="fcust" data-id="' + x.id + '" data-m="' + m.id + '" value="' + v + '" placeholder="০" style="width:100px"></div>';
+          h += '<div class="field"><label for="fc-' + x.id + m.id + '">' + esc(m.name) + '</label>' + (window.isAdmin ? '<input id="fc-' + x.id + m.id + '" class="inp num" type="number" inputmode="decimal" min="0" step="any" data-f="fcust" data-id="' + x.id + '" data-m="' + m.id + '" value="' + v + '" placeholder="০" style="width:100px">' : '<span>' + v + '</span>') + '</div>';
         });
         h += '</div></td></tr>';
       }
     });
     h += '</tbody><tfoot><tr><td colspan="2">মোট নির্ধারিত খরচ</td><td class="n" id="fxTotal"></td><td></td></tr></tfoot></table></div>';
     h += '<h3 style="font-size:15px">সদস্যপ্রতি নির্ধারিত খরচ</h3><div class="chips">' + S.members.map(function (m) { return '<span class="chip">' + esc(m.name) + ' <b data-live="mfix" data-m="' + m.id + '"></b></span>'; }).join('') + '</div>';
-    h += '<div class="row"><div class="field" style="flex:1 1 180px"><label for="nfName">নতুন খরচ</label><input id="nfName" class="inp" type="text" maxlength="40" placeholder="যেমন: মেরামত খরচ"></div>' +
-      '<div class="field"><label for="nfSplit">ভাগের নিয়ম</label><select id="nfSplit" class="inp"><option value="equal">সমান ভাগ</option><option value="custom">আলাদা পরিমাণ</option></select></div>' +
-      '<div class="field"><label for="nfAmt">টাকা (সমান ভাগ হলে)</label><input id="nfAmt" class="inp num" type="number" inputmode="decimal" min="0" step="any" placeholder="০" style="width:110px"></div>' +
-      '<button class="btn primary" data-act="addFixed">যোগ করুন</button></div></section>';
-    return h;
+    if (window.isAdmin) {
+      h += '<div class="row"><div class="field" style="flex:1 1 180px"><label for="nfName">নতুন খরচ</label><input id="nfName" class="inp" type="text" maxlength="40" placeholder="যেমন: মেরামত খরচ"></div>' +
+        '<div class="field"><label for="nfSplit">ভাগের নিয়ম</label><select id="nfSplit" class="inp"><option value="equal">সমান ভাগ</option><option value="custom">আলাদা পরিমাণ</option></select></div>' +
+        '<div class="field"><label for="nfAmt">টাকা (সমান ভাগ হলে)</label><input id="nfAmt" class="inp num" type="number" inputmode="decimal" min="0" step="any" placeholder="০" style="width:110px"></div>' +
+        '<button class="btn primary" data-act="addFixed">যোগ করুন</button></div>';
+      var publishButtons = '';
+      if (S.fixedPublished) {
+        publishButtons = '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">' +
+          '<button class="btn primary" data-act="publishFixedReport" title="আপডেট ও সেভ করুন" style="min-height:42px">✓ আপডেট ও সেভ</button>' +
+          '<button class="btn" data-act="editFixedReport" title="সম্পাদনা করুন" style="min-height:42px">✏️ সম্পাদনা</button>' +
+          '<button class="btn danger" data-act="deleteFixedReport" title="রিপোর্ট মুছুন / অপ্রকাশিত করুন" style="min-height:42px">🗑️ মুছুন (বাতিল)</button>' +
+          '</div>';
+      } else {
+        publishButtons = '<button class="btn primary" data-act="publishFixedReport" style="min-height:44px;font-size:15px">নির্ধারিত খরচ সেভ ও ড্যাশবোর্ডে প্রকাশ করুন</button>';
+      }
+      h += '<div class="admin-publish-box" style="margin-top:20px;padding:18px 20px;background:var(--tint);border:1px solid var(--line);border-radius:16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:14px">' +
+        '<div style="flex:1 1 300px"><h4 style="margin:0 0 4px;font-size:16px;color:var(--ink)">মাসিক নির্ধারিত খরচ প্রকাশ ও ড্যাশবোর্ড আপডেট</h4><p style="margin:0;font-size:13.5px;color:var(--muted)">মাসের শেষে নির্ধারিত খরচ চূড়ান্ত করে সেভ করলে তা মাসিক রিপোর্ট আকারে সংরক্ষিত হবে এবং ড্যাশবোর্ডে সকল সদস্যের জন্য প্রকাশিত হবে। ' + (S.fixedPublished ? '<span class="pill good" style="margin-left:6px">প্রকাশিত</span>' : '<span class="pill zero" style="margin-left:6px">অপ্রকাশিত</span>') + '</p></div>' +
+        publishButtons + '</div>';
+    }
+    return h + '</section>';
   }
 
   function viewMember() {
@@ -357,6 +472,10 @@
     if (S.members.length < 5) h += '<div class="row"><div class="field" style="flex:1 1 200px"><label for="nmName">নতুন সদস্যের নাম</label><input id="nmName" class="inp" type="text" maxlength="30" placeholder="নাম লিখুন"></div><button class="btn primary" data-act="addMember">সদস্য যোগ করুন</button></div>';
     else h += '<p class="hint">৫ জন সদস্য যোগ হয়েছে।</p>';
     return h + '</section>';
+  }
+
+  function viewDashboard() {
+    return viewHishab();
   }
 
   /* ---------- render ---------- */
@@ -382,6 +501,10 @@
   function renderAll() {
     $('monthLabel').textContent = label(ym);
     $('messName').value = S.name || '';
+    if (currentProfile) {
+      $('headerUserName').textContent = currentProfile.name || 'আমার প্রোফাইল';
+      $('userAvatar').textContent = (currentProfile.name || 'ম').trim().charAt(0).toLocaleUpperCase('bn-BD');
+    }
     document.querySelectorAll('.tab').forEach(function (b) { b.setAttribute('aria-selected', String(b.dataset.tab === tab)); });
     renderView();
   }
@@ -399,7 +522,13 @@
   $('view').addEventListener('input', function (e) {
     var t = e.target, f = t.dataset.f; if (!f) return;
     if (f === 'meal') {
-      var d = t.dataset.d, v = num(t.value);
+      var d = t.dataset.d;
+      if (!canEditMealOnDay(Number(d))) {
+        toast('শুধুমাত্র বাজারের নির্ধারিত তারিখে দায়িত্বপ্রাপ্ত সদস্য মিল ইনপুট দিতে পারবেন');
+        renderView();
+        return;
+      }
+      var v = num(t.value);
       if (!S.meals[d]) S.meals[d] = {};
       var meal = S.meals[d][t.dataset.m];
       if (typeof meal !== 'object' || !meal) meal = { breakfast: 0, lunch: 0, dinner: 0 };
@@ -412,12 +541,16 @@
     } else if (f === 'mjoma') {
       S.members.forEach(function (m) { if (m.id === t.dataset.id) m.joma = num(t.value); });
     } else if (f === 'fname') {
+      if (!window.isAdmin) return;
       S.fixed.forEach(function (x) { if (x.id === t.dataset.id) x.name = t.value; });
     } else if (f === 'famt') {
+      if (!window.isAdmin) return;
       S.fixed.forEach(function (x) { if (x.id === t.dataset.id) x.amount = num(t.value); });
     } else if (f === 'fcust') {
+      if (!window.isAdmin) return;
       S.fixed.forEach(function (x) { if (x.id === t.dataset.id) { if (!x.custom) x.custom = {}; x.custom[t.dataset.m] = num(t.value); } });
     } else if (f === 'fsplit') {
+      if (!window.isAdmin) return;
       S.fixed.forEach(function (x) { if (x.id === t.dataset.id) x.split = t.value === 'custom' ? 'custom' : 'equal'; });
       commit(); renderView(); return;
     }
@@ -427,6 +560,84 @@
   document.addEventListener('click', async function (e) {
     var b = e.target.closest('[data-act]'); if (!b) return;
     var a = b.dataset.act;
+    if (a === 'auth-show-register') { setAuthMode('register'); return; }
+    if (a === 'auth-show-login') { setAuthMode('login'); return; }
+    if (a === 'auth-signin' || a === 'auth-register') {
+      var email = $('authEmail').value.trim(), password = $('authPassword').value;
+      var message = $('authMessage');
+      message.textContent = '';
+      if (!email || !password) { message.textContent = 'ইমেইল ও পাসওয়ার্ড লিখুন।'; return; }
+      var registration = null;
+      if (a === 'auth-register') {
+        registration = { name: $('authName').value.trim(), mobile: $('authMobile').value.trim() };
+        if (!registration.name || !registration.mobile) { message.textContent = 'নতুন account-এর জন্য নাম ও মোবাইল নম্বর লিখুন।'; return; }
+        if (password.length < 6) { message.textContent = 'পাসওয়ার্ড অন্তত ৬ অক্ষরের হতে হবে।'; return; }
+      }
+      if (!authNS) { message.textContent = 'Firebase Auth চালু হয়নি। পেজটি আবার লোড করুন।'; return; }
+      b.disabled = true;
+      try {
+        if (a === 'auth-register') {
+          creatingAccount = true;
+          var credential = await authNS.createUserWithEmailAndPassword(email, password);
+          var newProfile = { name: registration.name, email: credential.user.email, mobile: registration.mobile, updatedAt: Date.now() };
+          await dbNS.collection('users').doc(credential.user.uid).set(newProfile);
+          await authNS.signOut();
+          creatingAccount = false;
+          $('authLayout').hidden = false; $('profilePanel').hidden = true; $('appShell').hidden = true;
+          setAuthMode('login');
+          $('authEmail').value = email; $('authPassword').value = '';
+          message.textContent = 'Account তৈরি হয়েছে। এখন email ও password দিয়ে লগইন করুন।';
+          message.classList.add('is-success');
+        } else await authNS.signInWithEmailAndPassword(email, password);
+      } catch (err) {
+        creatingAccount = false;
+        if (authNS.currentUser && a === 'auth-register') {
+          showProfileForm(authNS.currentUser, registration, true);
+          $('profileMessage').textContent = 'অ্যাকাউন্ট তৈরি হয়েছে, কিন্তু profile সেভ হয়নি। Firestore Rules যাচাই করে আবার চেষ্টা করুন।';
+          return;
+        }
+        var authErrors = {
+          'auth/email-already-in-use': 'এই ইমেইলে আগে থেকেই অ্যাকাউন্ট আছে। লগইন করুন।',
+          'auth/invalid-email': 'ইমেইল ঠিকানাটি সঠিক নয়।',
+          'auth/weak-password': 'পাসওয়ার্ড অন্তত ৬ অক্ষরের হতে হবে।',
+          'auth/user-not-found': 'এই ইমেইলে অ্যাকাউন্ট পাওয়া যায়নি। নতুন অ্যাকাউন্ট তৈরি করুন।',
+          'auth/wrong-password': 'পাসওয়ার্ডটি সঠিক নয়।',
+          'auth/invalid-credential': 'ইমেইল বা পাসওয়ার্ড সঠিক নয়।',
+          'auth/operation-not-allowed': 'Firebase Console-এ Email/Password sign-in চালু করুন।'
+        };
+        message.textContent = authErrors[err.code] || err.message || 'লগইন করা যায়নি।';
+      } finally { creatingAccount = false; b.disabled = false; }
+      return;
+    }
+    if (a === 'profile-open') { showProfileForm(currentUser, currentProfile, false); return; }
+    if (a === 'profile-cancel') { $('profilePanel').hidden = true; $('appShell').hidden = false; return; }
+    if (a === 'profile-save') {
+      var pName = $('profileName').value.trim(), pMobile = $('profileMobile').value.trim();
+      var pMessage = $('profileMessage'); pMessage.textContent = '';
+      if (!pName || !pMobile) { pMessage.textContent = 'নাম ও মোবাইল নম্বর পূরণ করুন।'; return; }
+      b.disabled = true;
+      try {
+        if (profileSetup) {
+          currentProfile = { name: pName, email: currentUser.email, mobile: pMobile, updatedAt: Date.now() };
+          await dbNS.collection('users').doc(currentUser.uid).set(currentProfile);
+          await enterApp(currentUser, currentProfile);
+        } else {
+          await dbNS.collection('users').doc(currentUser.uid).update({ name: pName, mobile: pMobile, updatedAt: Date.now() });
+          currentProfile.name = pName; currentProfile.mobile = pMobile;
+          $('headerUserName').textContent = pName || 'আমার প্রোফাইল';
+          $('userAvatar').textContent = pName.trim().charAt(0).toLocaleUpperCase('bn-BD') || 'ম';
+          $('profilePanel').hidden = true; $('appShell').hidden = false;
+          toast('প্রোফাইল সেভ হয়েছে');
+        }
+      } catch (err) { pMessage.textContent = 'Profile সেভ হয়নি। Firestore Rules যাচাই করুন।'; console.error('Profile save failed:', err); }
+      finally { b.disabled = false; }
+      return;
+    }
+    if (a === 'auth-signout') {
+      await doSave();
+      if (authNS) await authNS.signOut();
+      return;
+    }
     if (a === 'theme') {
       var isDark = document.documentElement.dataset.theme ? document.documentElement.dataset.theme === 'dark' : window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
       var nextTheme = isDark ? 'light' : 'dark';
@@ -480,12 +691,40 @@
       S.bazar = S.bazar.filter(function (x) { return x.id !== b.dataset.id; }); commit(); renderView(); return;
     }
     if (a === 'addFixed') {
+      if (!window.isAdmin) { toast('শুধুমাত্র অ্যাডমিন খরচ যোগ করতে পারবেন'); return; }
       var fn = $('nfName').value.trim(); if (!fn) { toast('খরচের নাম লিখুন'); return; }
       S.fixed.push({ id: uid(), name: fn, amount: num($('nfAmt').value), split: $('nfSplit').value === 'custom' ? 'custom' : 'equal', custom: {} }); commit(); renderView(); $('nfName').focus(); return;
     }
     if (a === 'delFixed') {
+      if (!window.isAdmin) { toast('শুধুমাত্র অ্যাডমিন খরচ মুছতে পারবেন'); return; }
       if (S.fixed.some(function (x) { return x.id === b.dataset.id && x.locked; })) return;
       S.fixed = S.fixed.filter(function (x) { return x.id !== b.dataset.id; }); commit(); renderView(); return;
+    }
+    if (a === 'publishFixedReport') {
+      if (!window.isAdmin) { toast('শুধুমাত্র অ্যাডমিন রিপোর্ট প্রকাশ করতে পারবেন'); return; }
+      S.fixedPublished = true;
+      S.fixedPublishedAt = Date.now();
+      await doSave();
+      renderView();
+      toast('নির্ধারিত খরচ সেভ হয়েছে এবং সদস্যভিত্তিক হিসাব ড্যাশবোর্ডে প্রকাশিত হয়েছে');
+      return;
+    }
+    if (a === 'editFixedReport') {
+      if (!window.isAdmin) { toast('শুধুমাত্র অ্যাডমিন সম্পাদনা করতে পারবেন'); return; }
+      toast('এখন আপনি উপরের নির্ধারিত খরচ সম্পাদনা করতে পারবেন। সম্পাদনা শেষে ‘আপডেট ও সেভ’ বাটনে চাপুন।');
+      var firstInp = document.querySelector('[data-f="famt"], [data-f="fcust"]');
+      if (firstInp) firstInp.focus();
+      return;
+    }
+    if (a === 'deleteFixedReport') {
+      if (!window.isAdmin) { toast('শুধুমাত্র অ্যাডমিন রিপোর্ট মুছতে পারবেন'); return; }
+      if (!window.confirm('আপনি কি নিশ্চিত যে এই মাসের নির্ধারিত খরচ রিপোর্ট বাতিল করতে চান? বাতিল করলে সদস্যভিত্তিক হিসাব ড্যাশবোর্ড থেকে অপ্রকাশিত হয়ে যাবে।')) return;
+      S.fixedPublished = false;
+      delete S.fixedPublishedAt;
+      await doSave();
+      renderView();
+      toast('মাসিক রিপোর্ট বাতিল করা হয়েছে এবং ড্যাশবোর্ড থেকে সরানো হয়েছে');
+      return;
     }
     if (a === 'xlsx') { exportXlsx(); return; }
     if (a === 'pdf') { exportPdf(); return; }
@@ -618,15 +857,16 @@
   async function boot() {
     try { var savedTheme = localStorage.getItem('mess-theme'); if (savedTheme === 'light' || savedTheme === 'dark') document.documentElement.dataset.theme = savedTheme; } catch (e) {}
     try {
-      if (window.claude && window.claude.use) {
-        dbNS = await window.claude.use('db');
-        dlNS = await window.claude.use('downloads');
-      }
-    } catch (e) {}
-    await loadMonth(ym);
-    try { localStorage.removeItem('mess-users'); localStorage.removeItem('mess-session'); } catch (e) {}
-    renderAll();
-    setStatus(dbNS ? 'তথ্য সেভ হচ্ছে' : 'এই ব্রাউজারে তথ্য সেভ হবে');
+      if (!window.firebase || !window.firebase.apps.length) throw new Error('Firebase SDK not loaded');
+      authNS = window.firebase.auth();
+      dbNS = window.firebase.firestore();
+      authNS.onAuthStateChanged(handleAuthState);
+    } catch (e) {
+      $('authLayout').hidden = false;
+      setAuthMode('login');
+      $('authMessage').textContent = 'Firebase চালু হয়নি। ইন্টারনেট ও Firebase config যাচাই করুন।';
+      console.error('Firebase initialization failed:', e);
+    }
   }
   boot();
 })();
