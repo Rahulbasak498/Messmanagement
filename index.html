@@ -1,5 +1,5 @@
 <!doctype html><html lang="bn"><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><title>মেস হিসাব - মাসিক ব্যবস্থাপনা</title>
-<meta name="theme-color" content="#3A3FCB">
+<meta name="theme-color" content="#13786D">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&family=Baloo+Da+2:wght@600;700;800&display=swap">
@@ -42,6 +42,7 @@
       <span class="profile-role-badge" id="profileRoleBadge">ব্যবহারকারী</span>
     </div>
   </div>
+  <p class="profile-subtitle">আপনার পরিচিতি ও যোগাযোগের তথ্য এক জায়গায় পরিচালনা করুন।</p>
   <p id="profileHelp">আপনার তথ্য দেখুন বা সম্পাদনা করুন।</p>
   <div class="profile-fields-list">
     <div class="field">
@@ -64,6 +65,13 @@
         মোবাইল নম্বর
       </label>
       <input class="inp" id="profileMobile" type="tel" autocomplete="tel" maxlength="20" placeholder="01XXXXXXXXX" required>
+    </div>
+    <div class="field">
+      <label for="profileAddress">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 10c0 5-8 12-8 12S4 15 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/></svg>
+        ঠিকানা
+      </label>
+      <textarea class="inp" id="profileAddress" autocomplete="street-address" maxlength="250" rows="3" placeholder="আপনার বর্তমান ঠিকানা লিখুন"></textarea>
     </div>
   </div>
   <div class="row profile-actions-row">
@@ -97,21 +105,32 @@
   <div class="workspace">
   <nav class="tabs" id="tabs" role="tablist" aria-label="প্রধান বিভাগ">
     <button class="tab" role="tab" data-act="tab" data-tab="hishab"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V11M12 20V4M19 20v-6"/></svg><span>হিসাব</span></button>
+    <button class="tab" role="tab" data-act="tab" data-tab="reports"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h10l4 4v14H5z"/><path d="M15 3v5h5M8 12h8M8 16h8"/></svg><span>রিপোর্ট</span></button>
     <button class="tab" role="tab" data-act="tab" data-tab="meal"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h18a9 9 0 0 1-18 0z"/><path d="M8.5 8c0-1.6 1.2-1.6 1.2-3.2M14 8c0-1.6 1.2-1.6 1.2-3.2"/></svg><span>মিল</span></button>
     <button class="tab" role="tab" data-act="tab" data-tab="bazar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 8h14l-1 12H6z"/><path d="M9 8a3 3 0 0 1 6 0"/></svg><span>বাজার</span></button>
     <button class="tab" role="tab" data-act="tab" data-tab="kharoch"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/></svg><span>নির্ধারিত খরচ</span></button>
     <button class="tab" role="tab" data-act="tab" data-tab="member"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/><path d="M16 5a3.2 3.2 0 0 1 0 6M18 14.5c2 .7 3.5 2.5 3.5 5.5"/></svg><span>সদস্য</span></button>
+    <button class="tab" id="adminTab" role="tab" data-act="tab" data-tab="admin" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4 6v5c0 5 3.4 8.5 8 10 4.6-1.5 8-5 8-10V6l-8-3Z"/><path d="m9 12 2 2 4-4"/></svg><span>অডিট লগ</span></button>
   </nav>
 
   <main id="view"><p class="hint">লোড হচ্ছে...</p></main>
   </div>
   <div class="status" id="status" aria-live="polite"></div>
 </div>
+<div class="confirm-overlay" id="confirmOverlay" hidden>
+  <section class="confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="confirmTitle" aria-describedby="confirmMessage">
+    <div class="confirm-icon" aria-hidden="true">!</div>
+    <span class="confirm-eyebrow">নিশ্চিতকরণ</span>
+    <h2 id="confirmTitle">আপনি কি নিশ্চিত?</h2>
+    <p id="confirmMessage">এই তথ্যটি মুছে ফেলতে চান? এই কাজটি ফিরিয়ে নেওয়া যাবে না।</p>
+    <div class="confirm-actions">
+      <button class="btn" type="button" data-act="cancelDelete">না, ফিরে যান</button>
+      <button class="btn danger confirm-delete-btn" type="button" data-act="confirmDelete">হ্যাঁ, মুছে ফেলুন</button>
+    </div>
+  </section>
+</div>
 <div class="toast" id="toast" role="status" hidden></div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/12.19.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/12.19.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore-compat.js"></script>

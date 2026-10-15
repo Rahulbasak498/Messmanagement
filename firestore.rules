@@ -2,23 +2,283 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // This app uses one shared mess ledger. Only signed-in accounts can read
-    // or change monthly records.
+    function isAdmin() {
+      return request.auth != null
+        && request.auth.token.email == 'rahulbasak498@gmail.com';
+    }
+
+    function bazarPath(month, entryId) {
+      return /databases/$(database)/documents/bazarEntries/$(month + '_' + entryId);
+    }
+
+    function auditPath(logId) {
+      return /databases/$(database)/documents/auditLogs/$(logId);
+    }
+
+    function mealEntryPath(month, day, memberId, slot) {
+      return /databases/$(database)/documents/mealEntries/$(month + '_' + day + '_' + memberId + '_' + slot);
+    }
+
     match /months/{monthId} {
-      allow read, write: if request.auth != null;
+      allow read: if request.auth != null;
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /marketTurns/{monthId} {
+      allow read: if request.auth != null;
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /bazarEntries/{entryId} {
+      function assignedBuyer(data) {
+        return request.auth != null
+          && data.uid == request.auth.uid
+          && exists(/databases/$(database)/documents/marketTurns/$(data.month))
+          && get(/databases/$(database)/documents/marketTurns/$(data.month)).data.assignments[data.day].uid == request.auth.uid
+          && get(/databases/$(database)/documents/marketTurns/$(data.month)).data.assignments[data.day].mid == data.mid;
+      }
+
+      function validBazar(data) {
+        return data.keys().hasAll(['id', 'month', 'day', 'mid', 'amount', 'note', 'uid', 'auditId', 'nextAuditId'])
+          && data.keys().hasOnly(['id', 'month', 'day', 'mid', 'amount', 'note', 'uid', 'auditId', 'nextAuditId'])
+          && data.id is string
+          && data.month is string
+          && data.month.matches('^[0-9]{4}-(0[1-9]|1[0-2])$')
+          && data.day is string
+          && data.day.matches('^(0?[1-9]|[12][0-9]|3[01])$')
+          && data.mid is string
+          && data.amount is number
+          && data.amount > 0
+          && data.note is string
+          && data.uid is string
+          && data.auditId is string
+          && data.nextAuditId is string
+          && data.auditId.size() > 0
+          && data.nextAuditId.size() > 0;
+      }
+
+      allow read: if request.auth != null;
+      allow create: if validBazar(request.resource.data)
+        && entryId == request.resource.data.month + '_' + request.resource.data.id
+        && existsAfter(auditPath(request.resource.data.auditId))
+        && getAfter(auditPath(request.resource.data.auditId)).data.action in ['bazar_add', 'bazar_migrate']
+        && getAfter(auditPath(request.resource.data.auditId)).data.entryId == request.resource.data.id
+        && getAfter(auditPath(request.resource.data.auditId)).data.actorUid == request.auth.uid
+        && getAfter(auditPath(request.resource.data.auditId)).data.month == request.resource.data.month
+        && getAfter(auditPath(request.resource.data.auditId)).data.day == request.resource.data.day
+        && getAfter(auditPath(request.resource.data.auditId)).data.memberId == request.resource.data.mid
+        && getAfter(auditPath(request.resource.data.auditId)).data.amount == request.resource.data.amount
+        && getAfter(auditPath(request.resource.data.auditId)).data.note == request.resource.data.note
+        && (isAdmin() || (getAfter(auditPath(request.resource.data.auditId)).data.action == 'bazar_add' && assignedBuyer(request.resource.data)));
+      allow update: if isAdmin()
+        && validBazar(request.resource.data)
+        && request.resource.data.auditId == resource.data.nextAuditId
+        && request.resource.data.nextAuditId != resource.data.nextAuditId
+        && existsAfter(auditPath(resource.data.nextAuditId))
+        && getAfter(auditPath(resource.data.nextAuditId)).data.action == 'bazar_edit'
+        && getAfter(auditPath(resource.data.nextAuditId)).data.entryId == resource.data.id
+        && getAfter(auditPath(resource.data.nextAuditId)).data.actorUid == request.auth.uid
+        && getAfter(auditPath(resource.data.nextAuditId)).data.month == resource.data.month
+        && getAfter(auditPath(resource.data.nextAuditId)).data.day == resource.data.day
+        && getAfter(auditPath(resource.data.nextAuditId)).data.memberId == resource.data.mid
+        && getAfter(auditPath(resource.data.nextAuditId)).data.before.amount == resource.data.amount
+        && getAfter(auditPath(resource.data.nextAuditId)).data.before.note == resource.data.note
+        && getAfter(auditPath(resource.data.nextAuditId)).data.after.amount == request.resource.data.amount
+        && getAfter(auditPath(resource.data.nextAuditId)).data.after.note == request.resource.data.note;
+      allow delete: if existsAfter(auditPath(resource.data.nextAuditId))
+        && getAfter(auditPath(resource.data.nextAuditId)).data.action == 'bazar_delete'
+        && getAfter(auditPath(resource.data.nextAuditId)).data.entryId == resource.data.id
+        && getAfter(auditPath(resource.data.nextAuditId)).data.actorUid == request.auth.uid
+        && getAfter(auditPath(resource.data.nextAuditId)).data.month == resource.data.month
+        && getAfter(auditPath(resource.data.nextAuditId)).data.day == resource.data.day
+        && getAfter(auditPath(resource.data.nextAuditId)).data.memberId == resource.data.mid
+        && getAfter(auditPath(resource.data.nextAuditId)).data.amount == resource.data.amount
+        && getAfter(auditPath(resource.data.nextAuditId)).data.note == resource.data.note
+        && isAdmin();
+    }
+
+    match /auditLogs/{logId} {
+      function validAuditShape() {
+        return request.resource.data.keys().hasAll(['actorUid', 'actorName', 'actorEmail', 'action', 'month', 'day', 'member', 'memberId', 'entryId', 'amount', 'note', 'before', 'after', 'createdAt'])
+          && request.resource.data.keys().hasOnly(['actorUid', 'actorName', 'actorEmail', 'action', 'month', 'day', 'member', 'memberId', 'entryId', 'amount', 'note', 'before', 'after', 'createdAt'])
+          && request.resource.data.actorUid == request.auth.uid
+          && request.resource.data.actorName is string
+          && request.resource.data.actorName == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.name
+          && request.resource.data.actorEmail == request.auth.token.email
+          && request.resource.data.action in ['bazar_add', 'bazar_edit', 'bazar_delete', 'bazar_migrate', 'meal_add', 'meal_edit', 'meal_delete']
+          && request.resource.data.month is string
+          && request.resource.data.month.matches('^[0-9]{4}-(0[1-9]|1[0-2])$')
+          && request.resource.data.day is string
+          && request.resource.data.day.matches('^(0?[1-9]|[12][0-9]|3[01])$')
+          && request.resource.data.member is string
+          && request.resource.data.memberId is string
+          && request.resource.data.amount is number
+          && request.resource.data.note is string
+          && (request.resource.data.before == null || request.resource.data.before is map)
+          && request.resource.data.after is map
+          && request.resource.data.createdAt == request.time;
+      }
+
+      function validBazarAuditTarget() {
+        return (request.resource.data.action in ['bazar_add', 'bazar_migrate']
+            && existsAfter(bazarPath(request.resource.data.month, request.resource.data.entryId))
+            && getAfter(bazarPath(request.resource.data.month, request.resource.data.entryId)).data.auditId == logId)
+          || (request.resource.data.action == 'bazar_edit'
+            && exists(bazarPath(request.resource.data.month, request.resource.data.entryId))
+            && get(bazarPath(request.resource.data.month, request.resource.data.entryId)).data.nextAuditId == logId
+            && existsAfter(bazarPath(request.resource.data.month, request.resource.data.entryId))
+            && getAfter(bazarPath(request.resource.data.month, request.resource.data.entryId)).data.auditId == logId)
+          || (request.resource.data.action == 'bazar_delete'
+            && exists(bazarPath(request.resource.data.month, request.resource.data.entryId))
+            && get(bazarPath(request.resource.data.month, request.resource.data.entryId)).data.nextAuditId == logId
+            && !existsAfter(bazarPath(request.resource.data.month, request.resource.data.entryId)));
+      }
+
+      function validMealAuditTarget() {
+        return (request.resource.data.action == 'meal_add'
+            && existsAfter(mealEntryPath(request.resource.data.month, request.resource.data.day, request.resource.data.memberId, request.resource.data.note))
+            && getAfter(mealEntryPath(request.resource.data.month, request.resource.data.day, request.resource.data.memberId, request.resource.data.note)).data.auditId == logId
+            && getAfter(mealEntryPath(request.resource.data.month, request.resource.data.day, request.resource.data.memberId, request.resource.data.note)).data.value == request.resource.data.after.value)
+          || (request.resource.data.action == 'meal_edit'
+            && existsAfter(mealEntryPath(request.resource.data.month, request.resource.data.day, request.resource.data.memberId, request.resource.data.note))
+            && getAfter(mealEntryPath(request.resource.data.month, request.resource.data.day, request.resource.data.memberId, request.resource.data.note)).data.auditId == logId
+            && ((!exists(mealEntryPath(request.resource.data.month, request.resource.data.day, request.resource.data.memberId, request.resource.data.note))
+              && getAfter(mealEntryPath(request.resource.data.month, request.resource.data.day, request.resource.data.memberId, request.resource.data.note)).data.value == request.resource.data.after.value)
+              || (exists(mealEntryPath(request.resource.data.month, request.resource.data.day, request.resource.data.memberId, request.resource.data.note))
+                && (!get(mealEntryPath(request.resource.data.month, request.resource.data.day, request.resource.data.memberId, request.resource.data.note)).data.keys().hasAny(['nextAuditId'])
+                  || get(mealEntryPath(request.resource.data.month, request.resource.data.day, request.resource.data.memberId, request.resource.data.note)).data.nextAuditId == logId)
+                && get(mealEntryPath(request.resource.data.month, request.resource.data.day, request.resource.data.memberId, request.resource.data.note)).data.value == request.resource.data.before.value))
+            && getAfter(mealEntryPath(request.resource.data.month, request.resource.data.day, request.resource.data.memberId, request.resource.data.note)).data.value == request.resource.data.after.value)
+          || (request.resource.data.action == 'meal_delete'
+            && ((exists(mealEntryPath(request.resource.data.month, request.resource.data.day, request.resource.data.memberId, request.resource.data.note))
+              && ((!get(mealEntryPath(request.resource.data.month, request.resource.data.day, request.resource.data.memberId, request.resource.data.note)).data.keys().hasAny(['nextAuditId'])
+                && logId == 'meal_delete_' + request.resource.data.entryId + '_' + request.auth.uid)
+                || (get(mealEntryPath(request.resource.data.month, request.resource.data.day, request.resource.data.memberId, request.resource.data.note)).data.keys().hasAny(['nextAuditId'])
+                  && get(mealEntryPath(request.resource.data.month, request.resource.data.day, request.resource.data.memberId, request.resource.data.note)).data.nextAuditId == logId))
+              && !existsAfter(mealEntryPath(request.resource.data.month, request.resource.data.day, request.resource.data.memberId, request.resource.data.note))
+              && get(mealEntryPath(request.resource.data.month, request.resource.data.day, request.resource.data.memberId, request.resource.data.note)).data.value == request.resource.data.before.value)
+              || (!exists(mealEntryPath(request.resource.data.month, request.resource.data.day, request.resource.data.memberId, request.resource.data.note))
+                && existsAfter(mealEntryPath(request.resource.data.month, request.resource.data.day, request.resource.data.memberId, request.resource.data.note))
+                && getAfter(mealEntryPath(request.resource.data.month, request.resource.data.day, request.resource.data.memberId, request.resource.data.note)).data.auditId == logId
+                && getAfter(mealEntryPath(request.resource.data.month, request.resource.data.day, request.resource.data.memberId, request.resource.data.note)).data.value == 0)));
+      }
+
+      function validAuditTarget() {
+        return validBazarAuditTarget()
+          || validMealAuditTarget()
+          || (request.resource.data.action == 'bazar_migrate' && isAdmin());
+      }
+
+      function validAuditActor() {
+        return isAdmin()
+          || (request.auth != null
+            && request.resource.data.action == 'bazar_add'
+            && exists(/databases/$(database)/documents/marketTurns/$(request.resource.data.month))
+            && get(/databases/$(database)/documents/marketTurns/$(request.resource.data.month)).data.assignments[request.resource.data.day].uid == request.auth.uid
+            && get(/databases/$(database)/documents/marketTurns/$(request.resource.data.month)).data.assignments[request.resource.data.day].mid == request.resource.data.memberId)
+          || (request.auth != null
+            && request.resource.data.action == 'meal_add'
+            && request.resource.data.before == null
+            && exists(/databases/$(database)/documents/marketTurns/$(request.resource.data.month))
+            && get(/databases/$(database)/documents/marketTurns/$(request.resource.data.month)).data.assignments[request.resource.data.day].uid == request.auth.uid);
+      }
+
+      allow read: if isAdmin();
+      allow create: if validAuditShape() && validAuditTarget() && validAuditActor();
+      allow update, delete: if false;
+    }
+
+    match /mealEntries/{entryId} {
+      allow read: if request.auth != null;
+
+      function hasValidMealData(data) {
+        return data.keys().hasAll(['month', 'day', 'memberId', 'slot', 'value', 'uid'])
+          && (data.keys().hasOnly(['month', 'day', 'memberId', 'slot', 'value', 'uid'])
+            || data.keys().hasOnly(['month', 'day', 'memberId', 'slot', 'value', 'uid', 'auditId', 'nextAuditId']))
+          && data.month is string
+          && data.month.matches('^[0-9]{4}-(0[1-9]|1[0-2])$')
+          && data.day is string
+          && data.day.matches('^(0?[1-9]|[12][0-9]|3[01])$')
+          && data.memberId is string
+          && data.slot in ['breakfast', 'lunch', 'dinner']
+          && data.value is number
+          && data.value >= 0
+          && data.uid is string
+          && (!data.keys().hasAny(['auditId', 'nextAuditId'])
+            || (data.keys().hasAll(['auditId', 'nextAuditId'])
+              && data.auditId is string && data.auditId.size() > 0
+              && data.nextAuditId is string && data.nextAuditId.size() > 0
+              && data.auditId != data.nextAuditId));
+      }
+
+      function assignedMealEditor(data) {
+        return request.auth != null
+          && exists(/databases/$(database)/documents/marketTurns/$(data.month))
+          && get(/databases/$(database)/documents/marketTurns/$(data.month)).data.assignments[data.day].uid == request.auth.uid;
+      }
+
+      allow create: if isAdmin()
+        || (request.auth != null
+          && hasValidMealData(request.resource.data)
+          && request.resource.data.keys().hasAll(['auditId', 'nextAuditId'])
+          && request.resource.data.uid == request.auth.uid
+          && entryId == request.resource.data.month + '_' + request.resource.data.day + '_' + request.resource.data.memberId + '_' + request.resource.data.slot
+          && assignedMealEditor(request.resource.data)
+          && existsAfter(auditPath(request.resource.data.auditId))
+          && getAfter(auditPath(request.resource.data.auditId)).data.actorUid == request.auth.uid
+          && getAfter(auditPath(request.resource.data.auditId)).data.entryId == entryId
+          && getAfter(auditPath(request.resource.data.auditId)).data.action == 'meal_add'
+          && getAfter(auditPath(request.resource.data.auditId)).data.before == null
+          && request.resource.data.value > 0
+          && getAfter(auditPath(request.resource.data.auditId)).data.after.value == request.resource.data.value);
+      allow update, delete: if isAdmin();
+    }
+
+    match /dailyMenus/{menuId} {
+      function validDailyMenu(data) {
+        return data.keys().hasAll(['month', 'day', 'menu', 'uid', 'updatedAt'])
+          && data.keys().hasOnly(['month', 'day', 'menu', 'uid', 'updatedAt'])
+          && data.month is string
+          && data.month.matches('^[0-9]{4}-(0[1-9]|1[0-2])$')
+          && data.day is string
+          && data.day.matches('^(0?[1-9]|[12][0-9]|3[01])$')
+          && data.menu is string
+          && data.menu.size() > 0
+          && data.menu.size() <= 500
+          && data.uid is string
+          && data.updatedAt == request.time;
+      }
+
+      function assignedMenuEditor(data) {
+        return request.auth != null
+          && exists(/databases/$(database)/documents/marketTurns/$(data.month))
+          && get(/databases/$(database)/documents/marketTurns/$(data.month)).data.assignments[data.day].uid == request.auth.uid;
+      }
+
+      allow read: if request.auth != null;
+      allow create: if validDailyMenu(request.resource.data)
+        && menuId == request.resource.data.month + '_' + request.resource.data.day
+        && (isAdmin() || (assignedMenuEditor(request.resource.data) && request.resource.data.uid == request.auth.uid));
+      allow update: if validDailyMenu(request.resource.data)
+        && menuId == request.resource.data.month + '_' + request.resource.data.day
+        && request.resource.data.month == resource.data.month
+        && request.resource.data.day == resource.data.day
+        && isAdmin();
+      allow delete: if isAdmin();
     }
 
     match /users/{userId} {
       function validProfile(data) {
         return data.keys().hasAll(['name', 'email', 'mobile', 'updatedAt'])
-          && data.keys().hasOnly(['name', 'email', 'mobile', 'updatedAt'])
+          && data.keys().hasOnly(['name', 'email', 'mobile', 'address', 'updatedAt'])
           && data.name is string && data.name.size() > 0
           && data.email is string && data.email == request.auth.token.email
           && data.mobile is string && data.mobile.size() > 0
+          && (!data.keys().hasAny(['address']) || (data.address is string && data.address.size() <= 250))
           && data.updatedAt is int;
       }
 
-      allow read: if request.auth != null && request.auth.uid == userId;
+      allow read: if request.auth != null && (request.auth.uid == userId || isAdmin());
       allow create: if request.auth != null
         && request.auth.uid == userId
         && validProfile(request.resource.data);
