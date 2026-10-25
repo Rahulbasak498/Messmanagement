@@ -1111,6 +1111,70 @@ button, .btn, .tab, .iconbtn, .inp { -webkit-tap-highlight-color: transparent; }
 .dashboard-market-list li b { overflow-wrap: anywhere; }
 .dashboard-market-list li small { color: var(--muted); overflow-wrap: anywhere; }
 .dashboard-market-list li > strong { flex: 0 0 auto; white-space: nowrap; font-size: 14px; }
+.dashboard-trend {
+  display: grid;
+  gap: 14px;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background:
+    radial-gradient(300px 150px at 100% 0%, color-mix(in srgb, var(--sun) 16%, transparent), transparent 75%),
+    var(--surface);
+  box-shadow: var(--shadow);
+}
+.dashboard-trend-head, .dashboard-trend-metrics {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+.dashboard-trend-head h2 { margin-top: 2px; font-size: 21px; }
+.dashboard-trend-metrics { justify-content: flex-start; gap: 10px; }
+.dashboard-trend-metrics > div {
+  min-width: 150px;
+  display: grid;
+  gap: 2px;
+  padding: 10px 13px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: color-mix(in srgb, var(--bg) 65%, var(--surface));
+}
+.dashboard-trend-metrics span { color: var(--muted); font-size: 12px; }
+.dashboard-trend-metrics strong { font-family: var(--font-display); font-size: 18px; }
+.dashboard-trend-chart {
+  height: 132px;
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  align-items: stretch;
+  gap: 8px;
+  padding: 10px 12px 8px;
+  border-radius: 15px;
+  background: color-mix(in srgb, var(--bg) 72%, var(--surface));
+}
+.dashboard-trend-day {
+  min-width: 0;
+  display: grid;
+  grid-template-rows: 1fr auto;
+  justify-items: center;
+  gap: 6px;
+}
+.dashboard-trend-track {
+  width: min(100%, 30px);
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+  overflow: hidden;
+  border-radius: 99px;
+  background: color-mix(in srgb, var(--accent) 9%, var(--surface));
+}
+.dashboard-trend-bar {
+  width: 100%;
+  min-height: 0;
+  border-radius: inherit;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 68%, var(--sun)), var(--accent));
+  transition: height .25s ease;
+}
+.dashboard-trend-label { color: var(--muted); font-size: 12px; font-weight: 600; }
 .daily-menu-entry { display: flex; align-items: flex-end; gap: 12px; margin-top: 14px; }
 .daily-menu-entry .field { flex: 1 1 300px; }
 .daily-menu-entry textarea { width: 100%; min-height: 72px; resize: vertical; }
@@ -1123,6 +1187,13 @@ button, .btn, .tab, .iconbtn, .inp { -webkit-tap-highlight-color: transparent; }
   .dashboard-today-head { align-items: flex-start; }
   .dashboard-today-head h2 { font-size: 19px; }
   .dashboard-today-head .pill { white-space: normal; text-align: center; }
+  .dashboard-trend { gap: 12px; padding: 16px; border-radius: 18px; }
+  .dashboard-trend-head { align-items: flex-start; }
+  .dashboard-trend-head h2 { font-size: 19px; }
+  .dashboard-trend-head .btn { flex: 0 0 auto; }
+  .dashboard-trend-metrics > div { min-width: 0; flex: 1 1 0; }
+  .dashboard-trend-chart { height: 112px; gap: 5px; padding-inline: 8px; }
+  .dashboard-trend-label { font-size: 11px; }
   .dashboard-focus-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
   .dashboard-focus-card { padding: 12px; border-radius: 14px; }
   .dashboard-focus-card > strong { font-size: 17px; }

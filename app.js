@@ -788,7 +788,7 @@
       return summaryMemberRank(a.name) - summaryMemberRank(b.name);
     });
     var daysInMonth = dim(ym), selectedDay = dashboardDay && dashboardDay <= daysInMonth ? dashboardDay : (ym === startYm ? Math.min(now.getDate(), daysInMonth) : 1);
-    var dayOptions = '', lunchTotal = 0, dinnerTotal = 0, dailyMarketTotal = 0, dailyMeals = {}, dailyMarket = {};
+    var dayOptions = '', lunchTotal = 0, dinnerTotal = 0, dailyMarketTotal = 0, dailyMeals = {}, dailyMarket = {}, marketByDay = {};
     for (var date = 1; date <= daysInMonth; date++) dayOptions += '<option value="' + date + '"' + (date === selectedDay ? ' selected' : '') + '>' + dayLabel(date) + '</option>';
     S.members.forEach(function (m) {
       var lunch = num(mealSlot(selectedDay, m.id, 'lunch')), dinner = num(mealSlot(selectedDay, m.id, 'dinner'));
@@ -796,8 +796,17 @@
       lunchTotal += lunch; dinnerTotal += dinner; dailyMarket[m.id] = 0;
     });
     S.bazar.forEach(function (b) {
+      marketByDay[b.day] = (marketByDay[b.day] || 0) + b.amount;
       if (b.day === selectedDay) { dailyMarketTotal += b.amount; if (b.mid in dailyMarket) dailyMarket[b.mid] += b.amount; }
     });
+    var trendEndDay = ym < currentMonthKey() ? daysInMonth : selectedDay;
+    var trendStartDay = Math.max(1, trendEndDay - 6), trendDays = [], trendTotal = 0, trendPeak = 0;
+    for (var trendDay = trendStartDay; trendDay <= trendEndDay; trendDay++) {
+      var trendAmount = marketByDay[trendDay] || 0;
+      trendDays.push({ day: trendDay, amount: trendAmount });
+      trendTotal += trendAmount;
+      trendPeak = Math.max(trendPeak, trendAmount);
+    }
     var selectedMarketEntries = S.bazar.filter(function (entry) { return entry.day === selectedDay; }).sort(compareBazarEntries);
     var selectedAssignee = bazarAssignee(selectedDay), selectedMarketStatus = marketDayStatus(selectedDay, selectedMarketEntries.length > 0);
     var selectedMenu = S.dailyMenus[String(selectedDay)] && S.dailyMenus[String(selectedDay)].text || '';
@@ -812,6 +821,14 @@
         }).join('') + '</ul>'
         : '<p class="dashboard-focus-note">এই তারিখে এখনো কোনো বাজারের খরচ যোগ হয়নি।') + '</section>' +
       '</section>';
+    h += '<section class="dashboard-trend" aria-labelledby="dashboardTrendTitle"><div class="dashboard-trend-head"><div><span class="dashboard-eyebrow">খরচের ঝলক</span><h2 id="dashboardTrendTitle">বাজার খরচের ধারা</h2><p class="dashboard-focus-note">' + trendStartDay.toLocaleString('bn-BD') + '–' + trendEndDay.toLocaleString('bn-BD') + ' তারিখের দৈনিক খরচ</p></div><button class="btn small" data-act="tab" data-tab="bazar">বাজার দেখুন <span aria-hidden="true">→</span></button></div>' +
+      '<div class="dashboard-trend-metrics"><div><span>এই সময়ের মোট</span><strong>' + f2(trendTotal) + ' ৳</strong></div><div><span>দৈনিক গড়</span><strong>' + f2(trendTotal / trendDays.length) + ' ৳</strong></div></div>' +
+      '<div class="dashboard-trend-chart" role="group" aria-label="তারিখ অনুযায়ী বাজার খরচের বার চার্ট">' +
+      trendDays.map(function (item) {
+        var barHeight = trendPeak ? Math.max(6, item.amount / trendPeak * 100) : 0;
+        var accessibleValue = dayLabel(item.day) + ', ' + f2(item.amount) + ' টাকা';
+        return '<div class="dashboard-trend-day" role="img" aria-label="' + esc(accessibleValue) + '" title="' + esc(accessibleValue) + '"><span class="dashboard-trend-track"><span class="dashboard-trend-bar" style="height:' + barHeight + '%"></span></span><span class="dashboard-trend-label">' + item.day.toLocaleString('bn-BD') + '</span></div>';
+      }).join('') + '</div></section>';
     h += '<section class="panel daily-summary"><div class="daily-summary-head"><h2>দিনভিত্তিক হিসাব</h2><div class="field"><label for="summaryDay">তারিখ</label><select id="summaryDay" class="inp">' + dayOptions + '</select></div></div>';
     if (S.members.length) {
       h += '<div class="tablewrap"><table><thead><tr><th>সদস্য</th><th class="n">দুপুর</th><th class="n">রাত</th><th class="n">মোট মিল</th><th class="n">বাজার (৳)</th></tr></thead><tbody>';
